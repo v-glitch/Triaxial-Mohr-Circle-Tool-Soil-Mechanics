@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<!-- Triaxial Mohr Circle Tool · © 2026 VR. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Triaxial Mohr Circle Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     THEME — restyle freely, everything derives from these tokens
+     ============================================================ */
+  :root{
+    --paper:      #F2F4F3;
+    --plot-bg:    #FBFCFB;
+    --ink:        #1E2A32;
+    --ink-soft:   #5C6B72;
+    --grid:       #DCE2DF;
+    --total:      #5B7A99;   /* total stress (dashed) */
+    --effective:  #B0413E;   /* effective stress (solid) */
+    --envelope:   #3E5C50;   /* effective M-C envelope */
+    --panel:      #FFFFFF;
+    --line:       #C9D1CD;
+    --warn:       #9A4A00;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:'Space Grotesk', system-ui, sans-serif;
+    min-height:100vh; padding:28px 20px 48px;
+  }
+  .wrap{ max-width:1080px; margin:0 auto; }
+
+  header{ display:flex; align-items:baseline; justify-content:space-between;
+          flex-wrap:wrap; gap:8px; border-bottom:2px solid var(--ink);
+          padding-bottom:14px; margin-bottom:22px; }
+  h1{ font-size:1.45rem; font-weight:700; letter-spacing:-0.01em; }
+  .sub{ font-family:'IBM Plex Mono', monospace; font-size:0.78rem; color:var(--ink-soft); }
+
+  .layout{ display:grid; grid-template-columns:305px 1fr; gap:22px; }
+  @media (max-width:840px){ .layout{ grid-template-columns:1fr; } }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); padding:18px; }
+  .panel h2{ font-size:0.75rem; text-transform:uppercase; letter-spacing:0.12em;
+             color:var(--ink-soft); margin-bottom:14px; }
+
+  .toggle{ display:flex; border:1px solid var(--ink); margin-bottom:18px; }
+  .toggle button{
+    flex:1; padding:8px 0; background:none; border:none; cursor:pointer;
+    font-family:'IBM Plex Mono', monospace; font-size:0.85rem; color:var(--ink);
+  }
+  .toggle button.active{ background:var(--ink); color:var(--paper); }
+  .toggle button:focus-visible{ outline:2px solid var(--effective); outline-offset:-2px; }
+
+  .ctrl{ margin-bottom:15px; }
+  .ctrl label{ display:block; font-size:0.9rem; margin-bottom:5px; }
+  .ctrl .row{ display:flex; gap:10px; align-items:center; }
+  .ctrl input[type=range]{ flex:1; accent-color:var(--ink); min-width:0; }
+  .ctrl input[type=number]{
+    width:74px; padding:4px 6px; border:1px solid var(--line);
+    font-family:'IBM Plex Mono', monospace; font-size:0.85rem; color:var(--ink);
+    background:var(--plot-bg);
+  }
+  .ctrl input[type=number]:focus{ outline:1.5px solid var(--ink); }
+  .ctrl select{ width:100%; padding:6px; border:1px solid var(--line);
+                font-family:'IBM Plex Mono', monospace; font-size:0.85rem;
+                color:var(--ink); background:var(--plot-bg); }
+  .ctrl input:disabled{ opacity:0.35; }
+  .ctrl .note{ font-size:0.74rem; color:var(--ink-soft); margin-top:3px; }
+
+  .warn{ display:none; font-size:0.8rem; color:var(--warn);
+         border-left:3px solid var(--warn); padding:6px 8px; margin-top:10px; }
+  .warn.show{ display:block; }
+
+  .export{ margin-top:16px; width:100%; padding:9px 0; background:none;
+           border:1px solid var(--ink); font-family:'Space Grotesk',sans-serif;
+           font-size:0.85rem; cursor:pointer; color:var(--ink); }
+  .export:hover{ background:var(--ink); color:var(--paper); }
+
+  .figure{ background:var(--panel); border:1px solid var(--line); padding:14px; }
+  canvas{ width:100%; display:block; background:var(--plot-bg); }
+  .plot-legend{ display:flex; flex-wrap:wrap; gap:16px; margin-top:10px;
+                font-family:'IBM Plex Mono', monospace; font-size:0.73rem;
+                color:var(--ink); }
+  .plot-legend .sw{ display:inline-block; width:26px; border-top:2px solid;
+                    margin-right:6px; vertical-align:middle; }
+  .caption{ font-family:'IBM Plex Mono', monospace; font-size:0.75rem;
+            color:var(--ink-soft); margin-top:8px; }
+
+  .results{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+            gap:1px; background:var(--line); border:1px solid var(--line); margin-top:16px; }
+  .results div{ background:var(--panel); padding:10px 12px; }
+  .results .k{ font-size:0.7rem; letter-spacing:0.1em;
+               color:var(--ink-soft); }
+  .results .f{ font-family:'IBM Plex Mono', monospace; font-size:0.66rem;
+               color:var(--ink-soft); margin-top:2px; }
+  .results .v{ font-family:'IBM Plex Mono', monospace; font-size:1.02rem; margin-top:3px; }
+
+  .formulas{ margin-top:16px; background:var(--panel); border:1px solid var(--line); }
+  .formulas summary{ padding:10px 12px; cursor:pointer; font-size:0.78rem;
+                     letter-spacing:0.1em; color:var(--ink-soft); }
+  .formulas pre{ padding:2px 16px 14px; font-family:'IBM Plex Mono', monospace;
+                 font-size:0.78rem; line-height:1.6; overflow-x:auto; color:var(--ink); }
+
+  footer{ margin-top:26px; font-size:0.78rem; color:var(--ink-soft);
+          font-family:'IBM Plex Mono', monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Triaxial Mohr Circle Tool</h1>
+    <span class="sub">total vs. effective stress at failure · <span class="u">kPa</span></span>
+  </header>
+
+  <div class="layout">
+
+    <!-- ================= CONTROLS ================= -->
+    <div class="panel">
+      <h2>Test conditions</h2>
+
+      <div class="toggle" role="group" aria-label="Test type">
+        <button id="btnCD" class="active">CD</button>
+        <button id="btnCU">CU</button>
+      </div>
+
+      <div class="ctrl">
+        <label>Stress unit</label>
+        <select id="unitSel">
+          <option value="kPa" selected>kPa</option>
+          <option value="MPa">MPa</option>
+          <option value="psi">psi</option>
+          <option value="psf">psf</option>
+          <option value="ksf">ksf</option>
+          <option value="tsf">tsf</option>
+        </select>
+        <div class="note">Switching converts your current values. All formulas
+          are unit-consistent — results come out in whatever unit you use.</div>
+      </div>
+
+      <div class="ctrl">
+        <label>Cell pressure σ₃ (<span class="u">kPa</span>)</label>
+        <div class="row">
+          <input type="range"  id="s3"  min="10" max="2000" step="any" value="100">
+          <input type="number" id="s3n" step="any" value="100">
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <label>Deviator stress at failure q<sub>f</sub> (<span class="u">kPa</span>)</label>
+        <div class="row">
+          <input type="range"  id="qf"  min="10" max="8000" step="any" value="300">
+          <input type="number" id="qfn" step="any" value="300">
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <label>Pore pressure at failure Δu<sub>f</sub> (<span class="u">kPa</span>)</label>
+        <div class="row">
+          <input type="range"  id="du"  min="-600" max="2000" step="any" value="0" disabled>
+          <input type="number" id="dun" step="any" value="0" disabled>
+        </div>
+        <div class="note" id="duNote">CD: drained, Δu = 0. Switch to CU to enable.</div>
+      </div>
+
+      <div class="ctrl">
+        <label>Effective cohesion c′ (<span class="u">kPa</span>)</label>
+        <div class="row">
+          <input type="range"  id="cp"  min="0" max="300" step="any" value="0">
+          <input type="number" id="cpn" step="any" value="0">
+        </div>
+        <div class="note">Envelope intercept: τ = c′ + σ′·tan φ′.
+          c′ = 0 for clean sands; c′ &gt; 0 for cemented / cohesive soils.</div>
+      </div>
+
+      <div class="ctrl">
+        <label>Total-stress cohesion c (<span class="u">kPa</span>)</label>
+        <div class="row">
+          <input type="range"  id="ct"  min="0" max="500" step="any" value="0" disabled>
+          <input type="number" id="ctn" step="any" value="0" disabled>
+        </div>
+        <div class="note">CU only: intercept of the total-stress envelope
+          (dashed) fitted to the total circle.</div>
+      </div>
+
+      <div class="warn" id="warnDu">
+        Δu<sub>f</sub> ≥ σ₃ gives effective confining stress ≤ 0 —
+        not physically possible in a specimen. Reduce Δu.
+      </div>
+      <div class="warn" id="warnCp">
+        c′ frozen at its borderline value <span id="capCp"></span> <span class="u">kPa</span>
+        (= R = q<sub>f</sub>/2). Here the envelope is horizontal (φ′ = 0); beyond this
+        no tangent envelope exists.
+      </div>
+      <div class="warn" id="warnCt">
+        c frozen at <span id="capCt"></span> <span class="u">kPa</span> (= R = q<sub>f</sub>/2).
+        φ = 0 at this borderline — the UU-style horizontal envelope. Larger c has
+        no tangent solution.
+      </div>
+
+      <button class="export" id="btnReset">Reset inputs</button>
+      <button class="export" id="btnPng">Export figure (PNG)</button>
+    </div>
+
+    <!-- ================= FIGURE ================= -->
+    <div>
+      <div class="figure">
+        <canvas id="plot"></canvas>
+        <div class="plot-legend" id="legend"></div>
+        <div class="caption" id="cap"></div>
+      </div>
+
+      <div class="results">
+        <div><span class="k">σ′₃</span>
+          <div class="f">= σ₃ − Δu<sub>f</sub></div>
+          <div class="v" id="rS3e">–</div></div>
+        <div><span class="k">σ′₁</span>
+          <div class="f">= σ₃ + q<sub>f</sub> − Δu<sub>f</sub></div>
+          <div class="v" id="rS1e">–</div></div>
+        <div><span class="k">CENTER C′</span>
+          <div class="f">= (σ′₁ + σ′₃) / 2</div>
+          <div class="v" id="rC">–</div></div>
+        <div><span class="k">RADIUS R</span>
+          <div class="f">= (σ′₁ − σ′₃) / 2 = q<sub>f</sub> / 2</div>
+          <div class="v" id="rR">–</div></div>
+        <div><span class="k">φ′ (EFFECTIVE)</span>
+          <div class="f">= sin⁻¹(R/√(C′²+c′²)) − tan⁻¹(c′/C′)</div>
+          <div class="v" id="rPhi">–</div></div>
+        <div><span class="k">φ (TOTAL, CU)</span>
+          <div class="f">= sin⁻¹(R/√(C²+c²)) − tan⁻¹(c/C)</div>
+          <div class="v" id="rPhiT">–</div></div>
+        <div><span class="k">α<sub>f</sub> (FAILURE PLANE)</span>
+          <div class="f">= 45° + φ′/2</div>
+          <div class="v" id="rAlpha">–</div></div>
+        <div><span class="k">σ′<sub>ff</sub> (FAILURE POINT)</span>
+          <div class="f">= C′ − R·sinφ′</div>
+          <div class="v" id="rSff">–</div></div>
+        <div><span class="k">τ<sub>ff</sub> (FAILURE POINT)</span>
+          <div class="f">= R·cosφ′</div>
+          <div class="v" id="rTff">–</div></div>
+      </div>
+
+      <details class="formulas">
+        <summary>FORMULAS USED</summary>
+        <pre>
+Notation:  C, C′ = circle centers (stress coordinates)
+           c, c′ = cohesion (envelope intercepts) — different things!
+
+σ₁ = σ₃ + q<sub>f</sub>                      total major principal stress
+σ′ = σ − Δu<sub>f</sub>                      effective stress
+C  = (σ₁ + σ₃) / 2                 center, total circle
+C′ = (σ′₁ + σ′₃) / 2               center, effective circle
+R  = (σ₁ − σ₃) / 2 = q<sub>f</sub> / 2       radius (same for both circles)
+
+Envelope τ = c + σ·tanφ tangent to circle (center C, radius R):
+    C·sinφ + c·cosφ = R
+    φ = asin( R / √(C² + c²) ) − atan( c / C )
+    special case c = 0:   sinφ′ = R / C′
+
+Failure plane angle:   α<sub>f</sub> = 45° + φ′/2   (from major principal plane)
+Failure point (tangency):   σ′<sub>ff</sub> = C′ − R·sinφ′ ,   τ<sub>ff</sub> = R·cosφ′
+Pole construction:  pole of a triaxial circle is at (σ′₃, 0);
+    a line from the pole at α<sub>f</sub> passes through the failure point
+Borderline:  c<sub>max</sub> = R = q<sub>f</sub>/2  →  φ = 0 (horizontal envelope, UU-style)
+        </pre>
+      </details>
+    </div>
+  </div>
+
+  <footer>
+    Built for educational use · 2026 · verify results independently ·
+    Single-specimen interpretation: c′ is user-specified, φ′ is the tangent solution.
+    Multi-specimen envelope fitting is the proper way to determine c′ and φ′ together.
+    <br>© 2026 VR. All rights reserved.
+  </footer>
+</div>
+
+<script>
+/* ==============================================================
+   1. ENGINEERING — the part you should be able to defend
+   ==============================================================
+   Sign convention: compression positive, semicircles in +τ half.
+   Inputs (kPa): s3 = cell pressure, qf = deviator stress at
+   failure, du = excess pore pressure at failure (0 for CD),
+   cp = effective cohesion c', ctot = total-stress cohesion c.
+
+   Key idea for c' ≠ 0: one circle cannot determine c' AND φ'
+   together (underdetermined). So c' is an input, and φ' is
+   solved from the tangency condition of the envelope
+   τ = c' + σ'·tanφ' with the circle (center C, radius R):
+
+        C·sinφ' + c'·cosφ' = R
+
+   Closed form:  φ' = asin( R / √(C² + c'²) ) − atan(c'/C)
+   If that comes out ≤ 0, no valid envelope exists for that c'. */
+
+function phiFromTangency(C, R, c){
+  const arg = R / Math.hypot(C, c);
+  if (arg > 1) return NaN;                      // circle bigger than any tangent line allows
+  const phi = Math.asin(arg) - Math.atan2(c, C);
+  return phi * 180 / Math.PI;                   // may be ≤ 0 → caller flags invalid
+}
+
+function computeState(s3, qf, du, cp, ctot){
+  // Total principal stresses at failure
+  const s1  = s3 + qf;
+
+  // Effective stresses: σ' = σ − u (same radius, circle shifts by Δu)
+  const s3e = s3 - du;
+  const s1e = s1 - du;
+
+  // Effective circle geometry
+  const C = (s1e + s3e) / 2;                    // center
+  const R = (s1e - s3e) / 2;                    // radius
+
+  // Effective friction angle for the chosen c'
+  // (c is clamped upstream to c_max = R, so φ ≥ 0; φ = 0 exactly at the borderline)
+  let phi = phiFromTangency(C, R, cp);
+  if (Math.abs(phi) < 1e-9) phi = 0;
+
+  // Total-stress parameters (meaningful when Δu ≠ 0, i.e. CU)
+  const Ctot = (s1 + s3) / 2;
+  let phiTot = du !== 0 ? phiFromTangency(Ctot, R, ctot) : NaN;
+  if (Math.abs(phiTot) < 1e-9) phiTot = 0;
+
+  // Failure plane orientation from the major principal plane
+  // (α_f = 45 + φ'/2 holds for any linear M-C envelope, c' included)
+  const alpha = 45 + phi / 2;
+
+  return { s1, s3, s1e, s3e, du, cp, ctot, C, R, Ctot, phi, phiTot, alpha,
+           validStress: s3e > 0,
+           validPhi:  isFinite(phi)    && phi    >= 0,
+           validPhiT: isFinite(phiTot) && phiTot >= 0 };
+}
+
+/* ==============================================================
+   2. STATE + WIRING
+   ============================================================== */
+const $ = id => document.getElementById(id);
+let testType = 'CD';
+
+/* stress units: every formula here is unit-consistent, so changing units
+   only converts the numbers and relabels — the math never changes */
+const UNITS = { kPa:1, MPa:0.001, psi:0.145038, psf:20.8854, ksf:0.0208854, tsf:0.0104427 };
+let unit = 'kPa';
+const SLIDER_BASE = { s3:[10,2000], qf:[10,8000], du:[-600,2000], cp:[0,300], ct:[0,500] }; // kPa
+let cpCeil = 300, ctCeil = 500;      // cohesion slider ceilings, in current unit
+const niceRound = x => {
+  if (x === 0) return 0;
+  const mag = Math.pow(10, Math.floor(Math.log10(Math.abs(x))));
+  return Math.round(x / mag * 2) / 2 * mag;
+};
+/* decimal-aware formatting: more places for small-magnitude units like MPa/tsf */
+const fmtN = x => Math.abs(x) >= 100 ? x.toFixed(1)
+             : Math.abs(x) >= 1   ? x.toFixed(2) : x.toFixed(3);
+
+/* slider ↔ number box pairs stay in sync; the number boxes are the source of
+   truth, so a blank box means "waiting for input" */
+const pairs = [['s3','s3n'], ['qf','qfn'], ['du','dun'], ['cp','cpn'], ['ct','ctn']];
+pairs.forEach(([r, n]) => {
+  $(r).addEventListener('input', () => { $(n).value = $(r).value; update(); });
+  $(n).addEventListener('input', () => {
+    const v = parseFloat($(n).value);
+    if (isFinite(v)) $(r).value = v;   // sync slider only when there's a number
+    update();
+  });
+});
+
+function readInputs(){
+  const req = id => parseFloat($(id).value);                     // NaN when blank
+  const opt = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : 0; };
+  return {
+    s3:   req('s3n'),
+    qf:   req('qfn'),
+    du:   testType === 'CD' ? 0 : opt('dun'),
+    cp:   opt('cpn'),
+    ctot: testType === 'CD' ? 0 : opt('ctn')
+  };
+}
+
+/* switching units converts current values and rescales slider ranges */
+function applyUnit(newUnit){
+  const conv = UNITS[newUnit] / UNITS[unit];
+  pairs.forEach(([r, n]) => {
+    const v = parseFloat($(n).value);
+    if (isFinite(v)) $(n).value = +(v * conv).toPrecision(6);
+    const [bmin, bmax] = SLIDER_BASE[r];
+    $(r).min = niceRound(bmin * UNITS[newUnit]);
+    $(r).max = niceRound(bmax * UNITS[newUnit]);
+    $(r).step = 'any';
+    const nv = parseFloat($(n).value);
+    if (isFinite(nv)) $(r).value = nv;
+  });
+  cpCeil = niceRound(300 * UNITS[newUnit]);
+  ctCeil = niceRound(500 * UNITS[newUnit]);
+  lastDu *= conv; lastCt *= conv;
+  unit = newUnit;
+  document.querySelectorAll('.u').forEach(el => el.textContent = unit);
+  update();
+}
+$('unitSel').addEventListener('change', e => applyUnit(e.target.value));
+
+function update(){
+  let { s3, qf, du, cp, ctot } = readInputs();
+
+  // blank σ₃ or q_f → waiting state: clear results and show a prompt
+  if (!isFinite(s3) || !isFinite(qf)){
+    ['rS3e','rS1e','rC','rR','rPhi','rPhiT','rAlpha','rSff','rTff']
+      .forEach(id => $(id).textContent = '–');
+    ['warnDu','warnCp','warnCt'].forEach(id => $(id).classList.remove('show'));
+    $('cap').innerHTML = 'Fig. 1 — enter σ₃ and q<sub>f</sub> to draw the Mohr circles';
+    $('legend').innerHTML = '';
+    drawEmpty();
+    return;
+  }
+
+  // Freeze c at the borderline: tangency requires c ≤ R = q_f/2.
+  // At c = R the envelope is horizontal (φ = 0); beyond it, no tangent exists.
+  const cCap = qf / 2;
+  $('cp').max = Math.min(cpCeil, cCap);  $('cpn').max = Math.min(cpCeil, cCap);
+  $('ct').max = Math.min(ctCeil, cCap);  $('ctn').max = Math.min(ctCeil, cCap);
+  if (cp   > cCap){ cp   = cCap; $('cp').value = cCap; $('cpn').value = cCap; }
+  if (ctot > cCap){ ctot = cCap; $('ct').value = cCap; $('ctn').value = cCap; }
+  $('capCp').textContent = fmtN(cCap);
+  $('capCt').textContent = fmtN(cCap);
+
+  const st = computeState(s3, qf, du, cp, ctot);
+
+  const f = x => fmtN(x) + ' ' + unit;
+  $('rS3e').textContent  = f(st.s3e);
+  $('rS1e').textContent  = f(st.s1e);
+  $('rC').textContent    = f(st.C);
+  $('rR').textContent    = f(st.R);
+  $('rPhi').textContent  = (st.validStress && st.validPhi) ? st.phi.toFixed(1) + '°' : '—';
+  $('rPhiT').textContent = (testType === 'CU' && st.validPhiT) ? st.phiTot.toFixed(1) + '°' : '—';
+  $('rAlpha').textContent= (st.validStress && st.validPhi) ? st.alpha.toFixed(1) + '°' : '—';
+  const okE = st.validStress && st.validPhi;
+  const pr = st.phi * Math.PI / 180;
+  $('rSff').textContent = okE ? f(st.C - st.R * Math.sin(pr)) : '—';
+  $('rTff').textContent = okE ? f(st.R * Math.cos(pr)) : '—';
+
+  $('warnDu').classList.toggle('show', !st.validStress);
+  $('warnCp').classList.toggle('show', st.validStress && cp >= cCap);
+  $('warnCt').classList.toggle('show', testType === 'CU' && ctot > 0 && ctot >= cCap);
+
+  $('cap').innerHTML = 'Fig. 1 — Mohr circles at failure, ' + testType +
+    ' triaxial test, c′ = ' + fmtN(cp) + ' ' + unit +
+    (testType === 'CU' ? ', Δu<sub>f</sub> = ' + fmtN(du) + ' ' + unit : '');
+
+  // legend lives outside the plot so it never collides with the drawing
+  const swatch = (v, dashed) =>
+    '<span class="sw" style="border-color:var(' + v + ');border-top-style:' +
+    (dashed ? 'dashed' : 'solid') + '"></span>';
+  let leg = '';
+  if (du !== 0) leg += '<span>' + swatch('--total', true) + 'total stress</span>';
+  leg += '<span>' + swatch('--effective', false) +
+         (du !== 0 ? 'effective stress' : 'σ = σ′ (drained)') + '</span>';
+  leg += '<span>' + swatch('--envelope', false) + 'envelope τ = c′ + σ′·tanφ′</span>';
+  $('legend').innerHTML = leg;
+
+  draw(st);
+}
+
+$('btnCD').addEventListener('click', () => setType('CD'));
+$('btnCU').addEventListener('click', () => setType('CU'));
+let lastDu = 80;                       // remembered CU pore pressure
+let lastCt = 0;                        // remembered CU total-stress cohesion
+function setType(t){
+  testType = t;
+  $('btnCD').classList.toggle('active', t === 'CD');
+  $('btnCU').classList.toggle('active', t === 'CU');
+  const cd = (t === 'CD');
+  ['du','dun','ct','ctn'].forEach(id => $(id).disabled = cd);
+  if (cd){
+    lastDu = +$('du').value;           // stash the CU values
+    lastCt = +$('ct').value;
+    $('du').value = 0; $('dun').value = 0;   // drained rule: Δu = 0
+    $('ct').value = 0; $('ctn').value = 0;   // no total circle → no total c
+  } else {
+    $('du').value = lastDu; $('dun').value = lastDu;
+    $('ct').value = lastCt; $('ctn').value = lastCt;
+  }
+  $('duNote').textContent = cd
+    ? 'CD: drained, Δu = 0. Switch to CU to enable.'
+    : '+Δu = contractive (NC / loose) → circle shifts left. −Δu = dilative (OC / dense) → circle shifts right.';
+  update();
+}
+
+/* ==============================================================
+   3. DRAWING — canvas plumbing (world kPa → pixels)
+   ============================================================== */
+const canvas = $('plot');
+const ctx = canvas.getContext('2d');
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function niceStep(range){
+  // magnitude-independent "nice" gridline spacing (works for MPa or psf alike)
+  const raw = range / 8;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+  return nice * mag;
+}
+
+function draw(st){
+  const dpr = window.devicePixelRatio || 1;
+  const wCss = canvas.clientWidth || canvas.parentElement.clientWidth - 28;
+  const hCss = Math.max(300, wCss * 0.52);
+  canvas.width  = wCss * dpr;
+  canvas.height = hCss * dpr;
+  canvas.style.height = hCss + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, wCss, hCss);
+
+  // Equal scale on both axes so circles stay circular.
+  // The σ window follows the circles: anchored at 0 for the textbook look
+  // when the circles are near the origin, panned right when they sit far
+  // from it (e.g. CD at high σ₃), and extended negative when Δu pushes
+  // σ′3 below zero — so the circles always fill the plot.
+  const pad = { l: 54, r: 18, t: 16, b: 40 };
+  const plotW = wCss - pad.l - pad.r;
+  const plotH = hCss - pad.t - pad.b;
+  const lo = (st.du !== 0) ? Math.min(st.s3e, st.s3) : st.s3e;
+  const hi = Math.max(st.s1, st.s1e);
+  const m  = Math.max((hi - lo) * 0.15, 1e-9);
+  let sigMin;
+  if (lo <= 0)                    sigMin = lo - m;   // ghost circle past zero
+  else if (lo < 0.8 * (hi - lo))  sigMin = 0;        // near origin: anchor at 0
+  else                            sigMin = lo - m;   // far away: pan to circles
+  const sigMax = hi + m;
+  const span   = sigMax - sigMin;
+  const scale  = Math.min(plotW / span, plotH / (span * 0.55));
+  const X = s => pad.l + (s - sigMin) * scale;
+  const Y = t => hCss - pad.b - t * scale;
+
+  // grid + ticks
+  const step = niceStep(sigMax);
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  ctx.fillStyle = css('--ink-soft');
+  ctx.strokeStyle = css('--grid');
+  ctx.lineWidth = 1;
+  for (let s = Math.ceil(sigMin / step) * step; s <= sigMax; s += step){
+    ctx.beginPath(); ctx.moveTo(X(s), Y(0)); ctx.lineTo(X(s), pad.t); ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillText(+s.toFixed(6), X(s), hCss - pad.b + 16);
+  }
+  for (let t = step; t * scale <= plotH; t += step){
+    ctx.beginPath(); ctx.moveTo(pad.l, Y(t)); ctx.lineTo(wCss - pad.r, Y(t)); ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.fillText(+t.toFixed(6), pad.l - 6, Y(t) + 4);
+  }
+
+  // axes: τ axis sits at σ = 0 — drawn only when 0 is inside the window
+  ctx.strokeStyle = css('--ink'); ctx.lineWidth = 1.5;
+  if (sigMin <= 0){
+    ctx.beginPath(); ctx.moveTo(X(0), pad.t); ctx.lineTo(X(0), Y(0)); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(pad.l, Y(0)); ctx.lineTo(wCss - pad.r, Y(0)); ctx.stroke();
+  ctx.fillStyle = css('--ink');
+  ctx.textAlign = 'left';
+  ctx.fillText('σ, σ′ (' + unit + ')', wCss - pad.r - 78, Y(0) + 30);
+  ctx.save(); ctx.translate(14, pad.t + 60); ctx.rotate(-Math.PI/2);
+  ctx.fillText('τ (' + unit + ')', 0, 0); ctx.restore();
+
+  const semicircle = (cx, r, color, dashed, alpha) => {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.l, pad.t, plotW, plotH); ctx.clip();
+    ctx.globalAlpha = (alpha === undefined) ? 1 : alpha;
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.setLineDash(dashed ? [7,5] : []);
+    ctx.beginPath();
+    ctx.arc(X(cx), Y(0), r * scale, Math.PI, 0);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // draws e.g. "φ" with a small subscript "T" at (x, y)
+  const subText = (main, sub, x, y, size, color) => {
+    ctx.fillStyle = color; ctx.textAlign = 'left';
+    ctx.font = '600 ' + size + 'px "IBM Plex Mono", monospace';
+    ctx.fillText(main, x, y);
+    const w = ctx.measureText(main).width;
+    ctx.font = '600 ' + Math.round(size * 0.72) + 'px "IBM Plex Mono", monospace';
+    ctx.fillText(sub, x + w, y + 3);
+  };
+
+  // envelope τ = c + σ·tanφ from intercept (0, c), drawn across the plot
+  const envelope = (c, phiDeg, color, dashed) => {
+    const m = Math.tan(phiDeg * Math.PI / 180);
+    let sigEnd = sigMax;
+    const tauTop = plotH / scale;
+    if (m > 0) sigEnd = Math.min(sigMax, (tauTop - c) / m);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.8;
+    ctx.setLineDash(dashed ? [7,5] : []);
+    ctx.beginPath(); ctx.moveTo(X(0), Y(c));
+    ctx.lineTo(X(sigEnd), Y(c + sigEnd * m)); ctx.stroke();
+    ctx.setLineDash([]);
+    return sigEnd;
+  };
+
+  // textbook-style angle mark at the END of an envelope line:
+  // short horizontal reference + arc between it and the line, label beyond.
+  // Kept small so the mark never crowds the lines themselves.
+  const angleAtEnd = (sigEnd, c, phiDeg, color, main, sub) => {
+    const th = phiDeg * Math.PI / 180;
+    const xe = X(sigEnd), ye = Y(c + sigEnd * Math.tan(th));
+    const back = 48;                            // anchor a bit back from the tip
+    const bx = xe - back * Math.cos(th);
+    const by = ye + back * Math.sin(th);
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 36, by); ctx.stroke();
+    ctx.setLineDash([]);
+    if (th > 0.005){
+      ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.arc(bx, by, 16, 0, -th, true); ctx.stroke();
+    }
+    subText(main, sub, bx + 23 * Math.cos(th/2) + 2,
+            by - 23 * Math.sin(th/2) + 4, 11, color);
+  };
+
+  // total circle + total-stress envelope (CU)
+  if (st.du !== 0){
+    semicircle(st.Ctot, st.R, css('--total'), true);
+    if (st.validPhiT){
+      const seT = envelope(st.ctot, st.phiTot, css('--total'), true);
+      angleAtEnd(seT, st.ctot, st.phiTot, css('--total'), 'φ', 'T');
+      const phiTR = st.phiTot * Math.PI / 180;
+      const snT = st.Ctot - st.R * Math.sin(phiTR);
+      const tfT = st.R * Math.cos(phiTR);
+      ctx.fillStyle = css('--total');
+      ctx.beginPath(); ctx.arc(X(snT), Y(tfT), 3.5, 0, 2 * Math.PI); ctx.fill();
+      // coordinates label, placed inside the total circle on the side AWAY
+      // from the effective circle (+Δu: effective is left → label right;
+      // −Δu: effective is right → label left), with a halo for readability
+      const tpLabel = '(' + fmtN(snT) + ', ' + fmtN(tfT) + ')';
+      ctx.font = '11px "IBM Plex Mono", monospace';
+      ctx.textAlign = st.du > 0 ? 'left' : 'right';
+      const tlx = X(snT) + (st.du > 0 ? 10 : -10);
+      ctx.lineWidth = 3; ctx.strokeStyle = css('--plot-bg');
+      ctx.strokeText(tpLabel, tlx, Y(tfT) + 16);
+      ctx.fillStyle = css('--total');
+      ctx.fillText(tpLabel, tlx, Y(tfT) + 16);
+    }
+  }
+
+  // effective circle — shown at all times; drawn faded when σ′3 ≤ 0 to flag
+  // that the state is non-physical, but fully visible thanks to the extended axis
+  if (st.validStress) semicircle(st.C, st.R, css('--effective'), false);
+  else semicircle(st.C, st.R, css('--effective'), false, 0.45);
+
+  // center dots on the σ axis
+  const centerDot = (cx, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(X(cx), Y(0), 3.5, 0, 2 * Math.PI); ctx.fill();
+  };
+  if (st.du !== 0) centerDot(st.Ctot, css('--total'));
+  if (st.validStress) centerDot(st.C, css('--effective'));
+  else {
+    ctx.globalAlpha = 0.45; centerDot(st.C, css('--effective')); ctx.globalAlpha = 1;
+  }
+
+  if (st.validStress && st.validPhi){
+    const phiRad = st.phi * Math.PI / 180;
+    const seE = envelope(st.cp, st.phi, css('--envelope'), false);
+    angleAtEnd(seE, st.cp, st.phi, css('--envelope'), 'φ′', '');
+
+    // c′ intercept marker (only when the τ axis is in view)
+    if (st.cp > 0 && sigMin <= 0){
+      ctx.fillStyle = css('--envelope');
+      ctx.beginPath(); ctx.arc(X(0), Y(st.cp), 3.5, 0, 2*Math.PI); ctx.fill();
+      ctx.font = '12px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText("c′ = " + st.cp, X(0) + 7, Y(st.cp) - 6);
+    }
+
+    // tangent (failure) point on the effective circle:
+    // (C − R·sinφ′, R·cosφ′) — same expressions with or without c′
+    const sn = st.C - st.R * Math.sin(phiRad);
+    const tf = st.R * Math.cos(phiRad);
+    ctx.fillStyle = css('--envelope');
+    ctx.beginPath(); ctx.arc(X(sn), Y(tf), 4, 0, 2 * Math.PI); ctx.fill();
+
+    // failure point coordinates + dashed drop line to the σ axis
+    ctx.strokeStyle = css('--ink-soft'); ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(X(sn), Y(tf)); ctx.lineTo(X(sn), Y(0)); ctx.stroke();
+    ctx.setLineDash([]);
+    // label placed below-right of the point — inside the circle, which is
+    // empty space — so it never sits on the envelope line; halo for contrast
+    const fpLabel = '(' + fmtN(sn) + ', ' + fmtN(tf) + ')';
+    ctx.font = '11px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.lineWidth = 3; ctx.strokeStyle = css('--plot-bg');
+    ctx.strokeText(fpLabel, X(sn) + 10, Y(tf) + 16);
+    ctx.fillStyle = css('--envelope');
+    ctx.fillText(fpLabel, X(sn) + 10, Y(tf) + 16);
+
+    // failure-plane orientation (pole construction): the pole of a triaxial
+    // circle is at (σ′3, 0); a line from the pole at αf passes through the
+    // tangent point — identity: cosφ / (1 − sinφ) = tan(45° + φ/2)
+    ctx.strokeStyle = css('--effective'); ctx.lineWidth = 1;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(X(st.s3e), Y(0)); ctx.lineTo(X(sn), Y(tf)); ctx.stroke();
+    ctx.setLineDash([]);
+    const aRad = st.alpha * Math.PI / 180;
+    ctx.strokeStyle = css('--effective'); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(X(st.s3e), Y(0), 20, 0, -aRad, true); ctx.stroke();
+    subText('α', 'f', X(st.s3e) + 28 * Math.cos(aRad/2) + 2,
+            Y(0) - 28 * Math.sin(aRad/2), 12, css('--effective'));
+
+    // total-stress angle now drawn at its envelope end (see total block above)
+
+    // prominent angle readout, top-right — haloed so envelope lines passing
+    // underneath never make it hard to read
+    const rx = wCss - pad.r - 10;
+    let ry = pad.t + 18;
+    const halo = css('--plot-bg');
+    const readout = (txt, color) => {
+      ctx.font = '600 13px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.lineWidth = 4; ctx.strokeStyle = halo;
+      ctx.strokeText(txt, rx, ry);
+      ctx.fillStyle = color; ctx.fillText(txt, rx, ry);
+      ry += 19;
+    };
+    readout('φ′ = ' + st.phi.toFixed(1) + '°', css('--envelope'));
+    if (st.du !== 0 && st.validPhiT)
+      readout('φ  = ' + st.phiTot.toFixed(1) + '°', css('--total'));
+    // "α" + subscript f + value, right-aligned by measuring each piece
+    const aVal = ' = ' + st.alpha.toFixed(1) + '°';
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
+    const wA = ctx.measureText('α').width, wV = ctx.measureText(aVal).width;
+    ctx.font = '600 10px "IBM Plex Mono", monospace';
+    const wF = ctx.measureText('f').width;
+    const ax0 = rx - (wA + wF + wV);
+    ctx.textAlign = 'left';
+    ctx.lineWidth = 4; ctx.strokeStyle = halo;
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
+    ctx.strokeText('α', ax0, ry);
+    ctx.font = '600 10px "IBM Plex Mono", monospace';
+    ctx.strokeText('f', ax0 + wA, ry + 3);
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
+    ctx.strokeText(aVal, ax0 + wA + wF, ry);
+    ctx.fillStyle = css('--ink');
+    ctx.fillText('α', ax0, ry);
+    ctx.font = '600 10px "IBM Plex Mono", monospace';
+    ctx.fillText('f', ax0 + wA, ry + 3);
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
+    ctx.fillText(aVal, ax0 + wA + wF, ry);
+
+    // Δu shift arrow between circle centers
+    if (st.du !== 0){
+      const yA = Y(0) - 14;
+      ctx.strokeStyle = css('--ink-soft'); ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(X(st.Ctot), yA); ctx.lineTo(X(st.C), yA); ctx.stroke();
+      const dir = st.du > 0 ? -1 : 1;   // +Δu shifts effective circle left
+      ctx.beginPath();
+      ctx.moveTo(X(st.C), yA);
+      ctx.lineTo(X(st.C) - dir * 7, yA - 4);
+      ctx.lineTo(X(st.C) - dir * 7, yA + 4);
+      ctx.closePath(); ctx.fillStyle = css('--ink-soft'); ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.fillText('Δu', (X(st.Ctot) + X(st.C)) / 2, yA - 8);
+    }
+  }
+
+  // (legend rendered as HTML below the canvas — see #legend)
+}
+
+/* empty plot with a prompt, shown while inputs are blank */
+function drawEmpty(){
+  const dpr = window.devicePixelRatio || 1;
+  const wCss = canvas.clientWidth || canvas.parentElement.clientWidth - 28;
+  const hCss = Math.max(300, wCss * 0.52);
+  canvas.width  = wCss * dpr;
+  canvas.height = hCss * dpr;
+  canvas.style.height = hCss + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, wCss, hCss);
+  ctx.font = '14px "IBM Plex Mono", monospace';
+  ctx.fillStyle = css('--ink-soft');
+  ctx.textAlign = 'center';
+  ctx.fillText('Enter σ₃ and qf to draw the Mohr circles', wCss / 2, hCss / 2);
+}
+
+/* Reset — blanks the number boxes so they wait for fresh input */
+$('btnReset').addEventListener('click', () => {
+  [['s3', 10], ['qf', 10], ['du', 0], ['cp', 0], ['ct', 0]].forEach(([id, base]) => {
+    $(id).value = base;
+    $(id + 'n').value = '';
+  });
+  lastDu = 0; lastCt = 0;
+  update();
+});
+
+/* PNG export — the report-figure button */
+$('btnPng').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = 'mohr-circles-failure.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+});
+
+window.addEventListener('resize', update);
+update();
+</script>
+</body>
+</html>
